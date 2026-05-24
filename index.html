@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài 4: Độ dịch chuyển và Quãng đường (Phần 2)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .drag-item { cursor: grab; }
+        .drag-item:active { cursor: grabbing; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translate(-50%, -10px); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div id="app" class="max-w-6xl mx-auto p-4 flex flex-col h-screen overflow-hidden relative">
+        
+        <transition name="fade">
+            <div v-if="toast.show" 
+                 class="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold text-center"
+                 :class="toast.isError ? 'bg-red-600' : 'bg-green-600'">
+                <span v-html="toast.message"></span>
+            </div>
+        </transition>
+
+        <header class="bg-blue-700 text-white p-4 rounded-t-lg shadow-md flex justify-between items-center flex-shrink-0">
+            <div>
+                <h1 class="text-2xl font-bold">VẬT LÍ 10 - BÀI 4 (YÊU CẦU 9)</h1>
+                <p class="text-sm opacity-90">So sánh Quãng đường đi được và Độ dịch chuyển</p>
+            </div>
+            <div class="hidden md:block font-semibold">
+                Chương II: Động học
+            </div>
+        </header>
+
+        <nav class="bg-white shadow-md flex overflow-x-auto no-scrollbar rounded-b-lg mb-4 flex-shrink-0">
+            <button v-for="(tab, index) in tabs" :key="index" 
+                @click="changeTab(index + 1)"
+                class="flex-1 py-3 px-4 font-semibold text-center border-b-4 transition-colors whitespace-nowrap"
+                :class="activeTab === index + 1 ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-600 hover:bg-gray-100'">
+                {{ tab }}
+            </button>
+        </nav>
+
+        <main class="flex-1 overflow-y-auto bg-white rounded-lg shadow-md p-6 no-scrollbar relative">
+            
+            <div v-show="activeTab === 1" class="h-full flex flex-col">
+                <h2 class="text-xl font-bold text-blue-700 mb-4 border-b-2 border-blue-200 pb-2">🕹️ Hoạt động: Phân loại Hành trình</h2>
+                <p class="italic text-gray-600 mb-4">Phân tích các hành trình sau và kéo thẻ thả vào đúng cột điều kiện so sánh giữa $s$ và $d$.</p>
+                
+                <div class="mb-6 p-4 bg-gray-50 rounded-lg min-h-[120px] flex flex-wrap gap-2 border-2 border-dashed border-gray-300"
+                     @dragover.prevent @drop="drop('source')">
+                    <div v-for="item in sourceList" :key="item.id"
+                         draggable="true" @dragstart="dragStart(item, 'source')"
+                         class="drag-item bg-white border border-gray-300 shadow-sm px-3 py-2 rounded text-sm w-[calc(50%-0.5rem)] md:w-[calc(33%-0.5rem)] text-center font-medium hover:border-blue-400">
+                        <span v-html="item.text"></span>
+                    </div>
+                    <div v-if="sourceList.length === 0" class="w-full text-center text-green-600 font-bold italic py-4">
+                        🎉 Chúc mừng! Bạn đã phân loại chính xác tất cả các tình huống!
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-4 flex-1">
+                    <div class="flex-1 bg-green-50 rounded-lg p-3 border-2 border-green-300 flex flex-col"
+                         @dragover.prevent @drop="drop('equal')">
+                        <h3 class="text-center font-bold text-green-700 mb-2 border-b border-green-200 pb-2">
+                            $s = d$<br><span class="text-xs font-normal">(Đi thẳng, không đổi chiều)</span>
+                        </h3>
+                        <div class="flex-1 flex flex-col gap-2 min-h-[150px]">
+                            <div v-for="item in listEqual" :key="item.id"
+                                 draggable="true" @dragstart="dragStart(item, 'equal')"
+                                 class="drag-item bg-white border-l-4 border-green-500 shadow-sm p-2 rounded text-xs font-medium">
+                                <span v-html="item.text"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex-1 bg-orange-50 rounded-lg p-3 border-2 border-orange-300 flex flex-col"
+                         @dragover.prevent @drop="drop('greater')">
+                        <h3 class="text-center font-bold text-orange-700 mb-2 border-b border-orange-200 pb-2">
+                            $s &gt; d$ ($d \neq 0$)<br><span class="text-xs font-normal">(Đi cong, zic-zắc, đi lùi)</span>
+                        </h3>
+                        <div class="flex-1 flex flex-col gap-2 min-h-[150px]">
+                            <div v-for="item in listGreater" :key="item.id"
+                                 draggable="true" @dragstart="dragStart(item, 'greater')"
+                                 class="drag-item bg-white border-l-4 border-orange-500 shadow-sm p-2 rounded text-xs font-medium">
+                                <span v-html="item.text"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex-1 bg-blue-50 rounded-lg p-3 border-2 border-blue-300 flex flex-col"
+                         @dragover.prevent @drop="drop('zero')">
+                        <h3 class="text-center font-bold text-blue-700 mb-2 border-b border-blue-200 pb-2">
+                            $d = 0$ ($s &gt; 0$)<br><span class="text-xs font-normal">(Quỹ đạo khép kín)</span>
+                        </h3>
+                        <div class="flex-1 flex flex-col gap-2 min-h-[150px]">
+                            <div v-for="item in listZero" :key="item.id"
+                                 draggable="true" @dragstart="dragStart(item, 'zero')"
+                                 class="drag-item bg-white border-l-4 border-blue-500 shadow-sm p-2 rounded text-xs font-medium">
+                                <span v-html="item.text"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-show="activeTab === 2">
+                <h2 class="text-xl font-bold text-blue-700 mb-4 border-b-2 border-blue-200 pb-2">📚 Bản chất & Các trường hợp đặc biệt</h2>
+                
+                <div class="flex flex-col lg:flex-row gap-6 items-start">
+                    <div class="flex-1 space-y-6">
+                        <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg shadow-sm">
+                            <h3 class="font-bold text-gray-800 text-lg mb-2">1. Bản chất sự khác biệt</h3>
+                            <ul class="list-disc ml-5 space-y-2 text-sm text-gray-700">
+                                <li><strong>Quãng đường ($s$):</strong> Chiều dài thực tế của quỹ đạo (gấp khúc, cong). $s$ <strong>luôn dương</strong> và cộng dồn liên tục.</li>
+                                <li><strong>Độ lớn độ dịch chuyển ($d$):</strong> Khoảng cách nối thẳng từ điểm xuất phát đến vị trí hiện tại (Đường ngắn nhất).</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-lg shadow-sm">
+                            <h3 class="font-bold text-blue-800 text-lg mb-3">2. Ba trường hợp thực tiễn</h3>
+                            <div class="space-y-3 text-sm text-gray-800">
+                                <div class="bg-white p-3 rounded border border-blue-100 flex gap-3 items-center">
+                                    <div class="font-bold text-lg text-green-600 w-20">$s = d$</div>
+                                    <div>Khi vật chuyển động <strong>thẳng</strong> và <strong>không đổi chiều</strong>.</div>
+                                </div>
+                                <div class="bg-white p-3 rounded border border-blue-100 flex gap-3 items-center">
+                                    <div class="font-bold text-lg text-orange-600 w-20">$s &gt; d$</div>
+                                    <div>Khi vật chuyển động trên đường cong, zic-zắc hoặc đi thẳng nhưng có <strong>đổi chiều</strong> (đi lùi).</div>
+                                </div>
+                                <div class="bg-white p-3 rounded border border-blue-100 flex gap-3 items-center">
+                                    <div class="font-bold text-lg text-blue-600 w-20">$d = 0$</div>
+                                    <div>Khi vật chuyển động trên một <strong>quỹ đạo khép kín</strong> (điểm cuối trùng điểm đầu).</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full lg:w-1/3 flex flex-col items-center">
+                        <div class="w-full rounded-lg overflow-hidden border-2 border-gray-300 shadow-md mb-4 bg-white flex items-center justify-center min-h-[250px] relative">
+                            <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" class="w-full h-auto p-4">
+                                <g stroke="#e5e7eb" stroke-width="1">
+                                    <line x1="0" y1="50" x2="400" y2="50"/>
+                                    <line x1="0" y1="100" x2="400" y2="100"/>
+                                    <line x1="0" y1="150" x2="400" y2="150"/>
+                                    <line x1="50" y1="0" x2="50" y2="200"/>
+                                    <line x1="150" y1="0" x2="150" y2="200"/>
+                                    <line x1="250" y1="0" x2="250" y2="200"/>
+                                    <line x1="350" y1="0" x2="350" y2="200"/>
+                                </g>
+                                <polyline points="50,150 150,50 250,150 350,50" fill="none" stroke="#f97316" stroke-width="4" stroke-dasharray="8,8" />
+                                <text x="100" y="80" fill="#ea580c" font-weight="bold" font-size="14">s (Quãng đường)</text>
+                                
+                                <defs>
+                                    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
+                                    </marker>
+                                </defs>
+                                <line x1="50" y1="150" x2="340" y2="53" stroke="#3b82f6" stroke-width="4" marker-end="url(#arrow)" />
+                                <text x="210" y="115" fill="#2563eb" font-weight="bold" font-size="14" transform="rotate(-18.4, 210, 115)">d (Độ dịch chuyển)</text>
+                                
+                                <circle cx="50" cy="150" r="6" fill="#111827" />
+                                <text x="20" y="175" font-weight="bold" font-size="12" fill="#374151">Điểm đầu</text>
+                                
+                                <circle cx="350" cy="50" r="8" fill="#ef4444" />
+                                <text x="310" y="30" font-weight="bold" font-size="12" fill="#ef4444">Robot (Điểm cuối)</text>
+                            </svg>
+                        </div>
+                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-3 w-full text-sm font-medium text-gray-800 shadow-sm rounded-r">
+                            💡 <strong>Chú giải:</strong> Đường nét đứt là quãng đường ($s$). Mũi tên thẳng là độ dịch chuyển ($d$).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-show="activeTab === 3" class="h-full flex flex-col">
+                <h2 class="text-xl font-bold text-blue-700 mb-4 border-b-2 border-blue-200 pb-2">🔬 Điều khiển Hành trình Robot</h2>
+                
+                <div class="bg-gray-50 p-4 rounded-lg mb-4 flex flex-col md:flex-row gap-6 items-center border border-gray-200">
+                    <div class="flex-1 w-full space-y-4">
+                        <div>
+                            <label class="block font-bold text-sm mb-1 text-gray-700">Chọn kịch bản di chuyển:</label>
+                            <select v-model="selectedScenario" class="w-full p-2 border border-gray-300 rounded font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="0">Kịch bản 1: Đi thẳng tắp</option>
+                                <option value="1">Kịch bản 2: Đi zic-zắc (Qua trạm)</option>
+                                <option value="2">Kịch bản 3: Quỹ đạo hình thoi (Khép kín)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-sm mb-1 text-gray-700">Tiến trình thời gian $t$:</label>
+                            <input type="range" v-model="timeProgress" min="0" max="100" step="1" class="w-full cursor-pointer accent-blue-600">
+                            <div class="flex justify-between text-xs text-gray-500 font-medium px-1">
+                                <span>Xuất phát</span>
+                                <span>Kết thúc</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full md:w-5/12 bg-white border border-gray-300 p-4 rounded-lg shadow-inner flex flex-col gap-3">
+                        <div class="flex justify-between items-center border-b pb-2">
+                            <span class="font-semibold text-orange-600">Quãng đường (s):</span>
+                            <span class="text-xl font-bold text-orange-600"><span>{{ currentS.toFixed(2) }}</span> <span class="text-sm">m</span></span>
+                        </div>
+                        <div class="flex justify-between items-center border-b pb-2">
+                            <span class="font-semibold text-blue-600">Độ dịch chuyển (d):</span>
+                            <span class="text-xl font-bold text-blue-600"><span>{{ currentD.toFixed(2) }}</span> <span class="text-sm">m</span></span>
+                        </div>
+                        
+                        <div class="text-center text-sm font-bold mt-1 py-1 rounded" :class="statusClass">
+                            TRẠNG THÁI: {{ statusText }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 relative min-h-[300px]">
+                    <canvas id="robotChart"></canvas>
+                </div>
+            </div>
+
+            <div v-show="activeTab === 4">
+                <h2 class="text-xl font-bold text-blue-700 mb-4 border-b-2 border-blue-200 pb-2">📝 Trắc nghiệm Phản hồi sâu</h2>
+                
+                <div class="space-y-6">
+                    <div v-for="(q, qIndex) in questions" :key="q.id" class="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                        <p class="font-bold text-gray-800 mb-3">Câu {{ qIndex + 1 }}: <span v-html="q.text"></span></p>
+                        
+                        <div class="flex flex-col gap-2">
+                            <button v-for="(opt, oIndex) in q.options" :key="oIndex"
+                                @click="selectOption(q.id, oIndex)"
+                                class="text-left px-4 py-3 border rounded-md transition-all duration-200"
+                                :class="getOptionClass(q, oIndex)">
+                                <span v-html="opt.text"></span>
+                            </button>
+                        </div>
+                        
+                        <div v-if="q.selected !== null" 
+                             class="mt-3 p-4 rounded-md text-sm border font-medium leading-relaxed"
+                             :class="q.options[q.selected].isCorrect ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-900'">
+                            💡 <strong>Giải thích:</strong> <span v-html="q.options[q.selected].feedback"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                const tabs = ['1. Khởi động', '2. Lý thuyết', '3. Mô phỏng', '4. Trắc nghiệm'];
+                const activeTab = ref(1);
+                let chartInstance = null;
+
+                const triggerMathJax = () => {
+                    nextTick(() => {
+                        if (window.MathJax && MathJax.typesetClear) {
+                            MathJax.typesetClear();
+                            MathJax.typesetPromise().catch((err) => console.log(err.message));
+                        }
+                    });
+                };
+
+                const changeTab = (tabIndex) => {
+                    activeTab.value = tabIndex;
+                    triggerMathJax();
+                    if (tabIndex === 3 && chartInstance) {
+                        updateChart();
+                    }
+                };
+
+                const draggedItem = ref(null);
+                const toast = ref({ show: false, message: '', isError: false });
+                let toastTimer = null;
+
+                const showToast = (msg, isError = false) => {
+                    toast.value = { show: true, message: msg, isError };
+                    if (toastTimer) clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => { toast.value.show = false; }, 2500);
+                };
+
+                const sourceList = ref([
+                    { id: 1, text: 'Quả táo rơi thẳng đứng từ cành cây xuống đất.', type: 'equal' },
+                    { id: 2, text: 'Robot đi thẳng tắp về phía trước 5 mét.', type: 'equal' },
+                    { id: 3, text: 'Cầu thủ chạy tiến lên 10m rồi lùi lại 3m đón bóng.', type: 'greater' },
+                    { id: 4, text: 'Ô tô chạy từ HN đến HP trên quốc lộ quanh co.', type: 'greater' },
+                    { id: 5, text: 'Chạy đúng một vòng quanh sân vận động rồi dừng.', type: 'zero' },
+                    { id: 6, text: 'Kim giây đồng hồ quay trọn vẹn một vòng mất 60s.', type: 'zero' }
+                ].sort(() => Math.random() - 0.5));
+                
+                const listEqual = ref([]);
+                const listGreater = ref([]);
+                const listZero = ref([]);
+
+                const dragStart = (item, source) => { draggedItem.value = { item, source }; };
+                
+                const drop = (target) => {
+                    if (!draggedItem.value) return;
+                    const { item, source } = draggedItem.value;
+                    
+                    if (target === 'equal' && item.type !== 'equal') { showToast('❌ Sai! Hành trình này không thoả mãn $s = d$.', true); draggedItem.value = null; return; }
+                    if (target === 'greater' && item.type !== 'greater') { showToast('❌ Sai! Hành trình này không thoả mãn $s &gt; d$.', true); draggedItem.value = null; return; }
+                    if (target === 'zero' && item.type !== 'zero') { showToast('❌ Sai! Hành trình này không phải là quỹ đạo khép kín ($d=0$).', true); draggedItem.value = null; return; }
+
+                    if (target !== 'source') showToast('✅ Chính xác!', false);
+                    
+                    if (source === 'source') sourceList.value = sourceList.value.filter(i => i.id !== item.id);
+                    if (source === 'equal') listEqual.value = listEqual.value.filter(i => i.id !== item.id);
+                    if (source === 'greater') listGreater.value = listGreater.value.filter(i => i.id !== item.id);
+                    if (source === 'zero') listZero.value = listZero.value.filter(i => i.id !== item.id);
+                    
+                    if (target === 'equal') listEqual.value.push(item);
+                    if (target === 'greater') listGreater.value.push(item);
+                    if (target === 'zero') listZero.value.push(item);
+                    if (target === 'source') sourceList.value.push(item);
+                    
+                    draggedItem.value = null;
+                    triggerMathJax();
+                };
+
+                const selectedScenario = ref("0");
+                const timeProgress = ref(0);
+                
+                const currentS = ref(0);
+                const currentD = ref(0);
+
+                const scenarios = [
+                    { path: [{x:0, y:0}, {x:10, y:0}] },
+                    { path: [{x:0, y:0}, {x:5, y:8}, {x:10, y:0}] },
+                    { path: [{x:0, y:0}, {x:5, y:5}, {x:10, y:0}, {x:5, y:-5}, {x:0, y:0}] }
+                ];
+
+                const parsedScenarios = scenarios.map(sc => {
+                    let totalLen = 0;
+                    const segments = [];
+                    for(let i=0; i<sc.path.length-1; i++){
+                        const p1 = sc.path[i];
+                        const p2 = sc.path[i+1];
+                        const len = Math.sqrt(Math.pow(p2.x-p1.x,2) + Math.pow(p2.y-p1.y,2));
+                        segments.push({ p1, p2, len, accum: totalLen + len });
+                        totalLen += len;
+                    }
+                    return { ...sc, segments, totalLen };
+                });
+
+                const statusClass = computed(() => {
+                    if (currentS.value === 0) return 'bg-gray-100 text-gray-500';
+                    if (currentD.value === 0) return 'bg-blue-100 text-blue-700 border border-blue-300';
+                    if (currentS.value > currentD.value) return 'bg-orange-100 text-orange-700 border border-orange-300';
+                    return 'bg-green-100 text-green-700 border border-green-300';
+                });
+
+                const statusText = computed(() => {
+                    if (currentS.value === 0) return 'Đang đứng im';
+                    if (currentD.value === 0) return 'd = 0 (Quay về chỗ cũ)';
+                    if (Math.abs(currentS.value - currentD.value) > 0.01) return 's > d (Đi zic-zắc/đổi hướng)';
+                    return 's = d (Đi thẳng)';
+                });
+
+                const initChart = () => {
+                    const ctx = document.getElementById('robotChart').getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'scatter',
+                        data: {
+                            datasets: [
+                                { label: 'Quỹ đạo mờ (Bản đồ)', data: parsedScenarios[0].path, borderColor: '#e5e7eb', borderWidth: 2, showLine: true, pointRadius: 0, fill: false, order: 4 },
+                                { label: 'Quãng đường s (Thực tế)', data: [{x:0,y:0}], borderColor: '#f97316', borderWidth: 3, borderDash: [5, 5], showLine: true, pointRadius: 0, fill: false, order: 2 },
+                                { label: 'Độ dịch chuyển d (Vectơ)', data: [{x:0,y:0},{x:0,y:0}], borderColor: '#3b82f6', borderWidth: 4, showLine: true, pointRadius: 0, fill: false, order: 3 },
+                                { label: 'Robot', data: [{x:0,y:0}], backgroundColor: '#ef4444', pointRadius: 8, pointBorderColor: 'white', pointBorderWidth: 2, order: 1 }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false, animation: false,
+                            plugins: { legend: { position: 'top' }, tooltip: { enabled: false } },
+                            scales: {
+                                x: { min: -2, max: 12, grid: { color: (ctx) => ctx.tick.value === 0 ? '#000' : '#e5e7eb', lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1 } },
+                                y: { min: -6, max: 10, grid: { color: (ctx) => ctx.tick.value === 0 ? '#000' : '#e5e7eb', lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1 } }
+                            }
+                        }
+                    });
+                };
+
+                const updateChart = () => {
+                    if (!chartInstance) return;
+                    const scIdx = parseInt(selectedScenario.value);
+                    const sc = parsedScenarios[scIdx];
+                    const p = parseFloat(timeProgress.value) / 100;
+                    
+                    const targetS = sc.totalLen * p;
+                    currentS.value = targetS;
+
+                    let currX = 0, currY = 0;
+                    let pastPath = [{x:0, y:0}];
+
+                    if (targetS === 0) {
+                        currX = sc.path[0].x; currY = sc.path[0].y;
+                    } else if (targetS >= sc.totalLen) {
+                        const lastP = sc.path[sc.path.length-1];
+                        currX = lastP.x; currY = lastP.y;
+                        pastPath = [...sc.path];
+                    } else {
+                        for (let seg of sc.segments) {
+                            if (targetS <= seg.accum) {
+                                pastPath.push(seg.p1);
+                                const over = targetS - (seg.accum - seg.len);
+                                const ratio = over / seg.len;
+                                currX = seg.p1.x + (seg.p2.x - seg.p1.x) * ratio;
+                                currY = seg.p1.y + (seg.p2.y - seg.p1.y) * ratio;
+                                pastPath.push({x: currX, y: currY});
+                                break;
+                            } else {
+                                pastPath.push(seg.p1);
+                                if (seg === sc.segments[sc.segments.length-1]) pastPath.push(seg.p2);
+                            }
+                        }
+                    }
+
+                    currentD.value = Math.sqrt(Math.pow(currX, 2) + Math.pow(currY, 2));
+
+                    chartInstance.data.datasets[0].data = sc.path;
+                    chartInstance.data.datasets[1].data = pastPath;
+                    chartInstance.data.datasets[2].data = [{x:0, y:0}, {x: currX, y: currY}];
+                    chartInstance.data.datasets[3].data = [{x: currX, y: currY}];
+
+                    requestAnimationFrame(() => { chartInstance.update('none'); });
+                };
+
+                watch(timeProgress, () => { updateChart(); });
+                watch(selectedScenario, () => { timeProgress.value = 0; updateChart(); });
+
+                // Đã chỉnh sửa lỗi escape Latex \ge và ký tự HTML &lt;
+                const questions = ref([
+                    {
+                        id: 1,
+                        text: 'Nhận định nào sau đây là ĐÚNG khi so sánh quãng đường đi được ($s$) và độ lớn độ dịch chuyển ($d$) của một vật chuyển động bất kì?',
+                        options: [
+                            { text: 'A. $s$ luôn luôn bằng $d$.', isCorrect: false, feedback: 'Bẫy: Chỉ đúng khi vật đi thẳng và không đổi chiều.' },
+                            { text: 'B. $s$ luôn luôn lớn hơn $d$.', isCorrect: false, feedback: 'Bẫy: Thiếu trường hợp dấu bằng khi vật đi thẳng không đổi chiều.' },
+                            { text: 'C. $s \\ge d$.', isCorrect: true, feedback: 'Đúng: Quãng đường (chiều dài quỹ đạo) luôn lớn hơn hoặc bằng độ lớn độ dịch chuyển (đoạn nối tắt).' },
+                            { text: 'D. $s &lt; d$.', isCorrect: false, feedback: 'Bẫy: Quãng đường thực tế không bao giờ có thể nhỏ hơn khoảng cách nối thẳng giữa 2 điểm.' }
+                        ],
+                        selected: null
+                    },
+                    {
+                        id: 2,
+                        text: 'Một học sinh tung một quả bóng tennis lên cao theo phương thẳng đứng. Quả bóng lên đến độ cao $2~m$ rồi rơi xuống và được học sinh bắt lại tại đúng vị trí vừa ném. Quãng đường $s$ và độ dịch chuyển $d$ của quả bóng là:',
+                        options: [
+                            { text: 'A. $s = 2~m; d = 2~m$.', isCorrect: false, feedback: 'Bẫy: Bạn mới chỉ tính lúc bóng đi lên mà quên mất hành trình bóng rơi xuống.' },
+                            { text: 'B. $s = 4~m; d = 4~m$.', isCorrect: false, feedback: 'Bẫy: Bạn tính đúng quãng đường (lên $2m$ + xuống $2m = 4m$). Nhưng đã nhầm độ dịch chuyển bằng quãng đường.' },
+                            { text: 'C. $s = 4~m; d = 0~m$.', isCorrect: true, feedback: 'Đúng: Quãng đường là tổng cả đi lên và xuống. Độ dịch chuyển bằng $0$ do điểm đầu và điểm cuối trùng nhau.' },
+                            { text: 'D. $s = 0~m; d = 0~m$.', isCorrect: false, feedback: 'Bẫy: Quả bóng đã di chuyển qua lại trong không gian nên quãng đường thực tế chắc chắn lớn hơn $0$.' }
+                        ],
+                        selected: null
+                    },
+                    {
+                        id: 3,
+                        text: 'Một xe tải đi thẳng từ điểm A đến điểm B cách nhau $10~km$, sau đó xe quay đầu đi ngược lại $3~km$ và dừng ở điểm C. Quãng đường $s$ và độ dịch chuyển $d$ của xe (so với A) lần lượt là:',
+                        options: [
+                            { text: 'A. $s = 13~km; d = 13~km$.', isCorrect: false, feedback: 'Bẫy: Bạn đã cộng gộp cả đoạn quay đầu vào độ dịch chuyển. Độ dịch chuyển là đoạn AC, không phải tổng quãng đường.' },
+                            { text: 'B. $s = 10~km; d = 7~km$.', isCorrect: false, feedback: 'Bẫy: Bạn đã quên cộng đoạn quay lùi $3~km$ vào tổng quãng đường đi được của xe.' },
+                            { text: 'C. $s = 13~km; d = 7~km$.', isCorrect: true, feedback: 'Đúng: Quãng đường $s = 10 + 3 = 13~km$. Điểm C cách A một khoảng là $d = 10 - 3 = 7~km$.' },
+                            { text: 'D. $s = 7~km; d = 13~km$.', isCorrect: false, feedback: 'Bẫy: Bạn đã gắn nhầm giá trị của quãng đường cho độ dịch chuyển và ngược lại.' }
+                        ],
+                        selected: null
+                    },
+                    {
+                        id: 4,
+                        text: 'Một robot di chuyển trên mặt sàn phẳng theo hình chữ nhật MNPQ. Biết $MN = 4~m$ và $NP = 3~m$. Nếu robot đi một mạch từ góc M, qua N rồi dừng lại ở góc P. Tính quãng đường và độ lớn độ dịch chuyển của robot?',
+                        options: [
+                            { text: 'A. $s = 7~m; d = 7~m$.', isCorrect: false, feedback: 'Bẫy: Quỹ đạo là đường gấp khúc M-N-P, do đó $s$ không thể bằng $d$.' },
+                            { text: 'B. $s = 7~m; d = 5~m$.', isCorrect: true, feedback: 'Đúng: Quãng đường $s = MN + NP = 4 + 3 = 7~m$. Độ dịch chuyển là đoạn nối chéo $MP$, dùng Pitago: $d = \\sqrt{4^2 + 3^2} = 5~m$.' },
+                            { text: 'C. $s = 5~m; d = 7~m$.', isCorrect: false, feedback: 'Bẫy: Bị ngược vị trí giữa quãng đường và độ dịch chuyển.' },
+                            { text: 'D. $s = 14~m; d = 0~m$.', isCorrect: false, feedback: 'Bẫy: Đây là kết quả khi robot đi trọn vẹn $1$ vòng quanh hình chữ nhật về lại M, nhưng đề bài nói robot dừng ở P.' }
+                        ],
+                        selected: null
+                    }
+                ]);
+
+                const selectOption = (qId, optIdx) => {
+                    const q = questions.value.find(q => q.id === qId);
+                    if (q.selected === null) {
+                        q.selected = optIdx;
+                        triggerMathJax(); 
+                    }
+                };
+
+                const getOptionClass = (q, oIndex) => {
+                    if (q.selected === null) return 'bg-white hover:bg-gray-100 border-gray-300';
+                    if (q.selected === oIndex) return q.options[oIndex].isCorrect ? 'bg-green-600 text-white border-green-700' : 'bg-red-500 text-white border-red-600';
+                    if (q.options[oIndex].isCorrect) return 'bg-green-100 border-green-500 text-green-900 font-bold'; 
+                    return 'bg-gray-100 border-gray-200 opacity-60'; 
+                };
+
+                onMounted(() => {
+                    initChart();
+                    triggerMathJax();
+                });
+
+                return {
+                    tabs, activeTab, changeTab,
+                    sourceList, listEqual, listGreater, listZero, dragStart, drop,
+                    toast,
+                    selectedScenario, timeProgress, currentS, currentD, statusClass, statusText,
+                    questions, selectOption, getOptionClass
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
